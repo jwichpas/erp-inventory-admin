@@ -1,85 +1,92 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
-import HelloWorld from './components/HelloWorld.vue'
+import { onMounted, computed, ref } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { setAppInitialized } from '@/router/index'
+import AppLayout from '@/layouts/AppLayout.vue'
+import AuthLayout from '@/layouts/AuthLayout.vue'
+
+const route = useRoute()
+const authStore = useAuthStore()
+const isInitialized = ref(false)
+
+const currentLayout = computed(() => {
+  return route.meta.layout || 'default'
+})
+
+onMounted(async () => {
+  try {
+    console.log('App: Starting initialization...')
+
+    // Add global error handler
+    window.addEventListener('error', (event) => {
+      console.error('Global error caught:', event.error)
+      console.error('Error details:', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        stack: event.error?.stack
+      })
+    })
+
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Unhandled promise rejection:', event.reason)
+      event.preventDefault() // Prevent the default behavior (which might close the browser)
+    })
+
+    // Initialize auth store with error handling
+    console.log('App: Initializing auth store...')
+    await authStore.initialize()
+
+    // Wait a bit more to ensure everything is settled
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    console.log('App: Initialization completed successfully, auth state:', {
+      isAuthenticated: authStore.isAuthenticated,
+      hasUser: !!authStore.user,
+      hasSession: !!authStore.session,
+      loading: authStore.loading
+    })
+  } catch (error) {
+    console.error('App: Failed to initialize app:', error)
+    // Don't rethrow the error to prevent app crash
+  } finally {
+    isInitialized.value = true
+    setAppInitialized(true)
+    console.log('App: Marked as initialized')
+  }
+})
 </script>
 
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="@/assets/logo.svg" width="125" height="125" />
-
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-
-      <nav>
-        <RouterLink to="/">Home</RouterLink>
-        <RouterLink to="/about">About</RouterLink>
-      </nav>
+  <div id="app">
+    <!-- Loading screen while initializing -->
+    <div v-if="!isInitialized" class="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div class="text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+        <p class="mt-4 text-gray-600">Loading...</p>
+      </div>
     </div>
-  </header>
 
-  <RouterView />
+    <!-- App content after initialization -->
+    <div v-else>
+      <AppLayout v-if="currentLayout === 'main'">
+        <RouterView />
+      </AppLayout>
+
+      <div v-else-if="currentLayout === 'auth'">
+        <RouterView />
+      </div>
+
+      <div v-else-if="currentLayout === 'error'"
+        class="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <RouterView />
+      </div>
+
+      <div v-else>
+        <RouterView />
+      </div>
+    </div>
+  </div>
 </template>
-
-<style scoped>
-header {
-  line-height: 1.5;
-  max-height: 100vh;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-nav {
-  width: 100%;
-  font-size: 12px;
-  text-align: center;
-  margin-top: 2rem;
-}
-
-nav a.router-link-exact-active {
-  color: var(--color-text);
-}
-
-nav a.router-link-exact-active:hover {
-  background-color: transparent;
-}
-
-nav a {
-  display: inline-block;
-  padding: 0 1rem;
-  border-left: 1px solid var(--color-border);
-}
-
-nav a:first-of-type {
-  border: 0;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  nav {
-    text-align: left;
-    margin-left: -1rem;
-    font-size: 1rem;
-
-    padding: 1rem 0;
-    margin-top: 1rem;
-  }
-}
-</style>

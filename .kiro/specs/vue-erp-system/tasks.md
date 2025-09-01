@@ -1,0 +1,299 @@
+# Implementation Plan
+
+- [x] 1. Set up project foundation and core configuration
+  - Configure TypeScript interfaces for exact database models: `companies`, `user_companies`, `roles`, `branches`, `warehouses`, `warehouse_zones`, `storage_locations`, `products`, `brands`, `categories`, `parties`, `sales_docs`, `purchase_docs`, `notifications`, `notification_preferences`, `stock_ledger`, `warehouse_stock`, `warehouse_stock_location`
+  - Set up Supabase client configuration with authentication, RLS policies, and real-time subscriptions
+  - Configure Pinia stores structure with TypeScript support and base store patterns
+  - Set up Vue Router with authentication guards using `app_functions.user_has_permission()` and `app_functions.auth_has_company_access()`
+  - Configure Tailwind CSS 4 with custom design system, component classes, and responsive utilities
+  - **Dependencies**: `@supabase/supabase-js`, `pinia`, `vue-router`, `tailwindcss`, `typescript`, `zod`
+  - _Requirements: 2.1, 2.2, 13.1, 13.2_
+
+- [x] 2. Implement authentication system and layouts
+  - Create authentication layout component with Tailwind CSS responsive design (mobile-first approach) and dark mode support using `dark:` classes
+  - Implement login form component with Zod validation schema and Tailwind form styling including dark mode variants
+  - Create register form component with email verification flow using Supabase Auth with dark mode compatible styling
+  - Implement forgot password functionality with Supabase Auth and Tailwind styled components with `dark:` prefixes
+  - Create main application layout with Tailwind CSS grid/flexbox for header and sidebar structure with dark theme support
+  - Set up authentication store with Pinia for user state management and session persistence
+  - **Dependencies**: `@supabase/supabase-js`, `pinia`, `zod`, `tailwindcss`, `@headlessui/vue`
+  - **Tables Used**: `auth.users` (Supabase Auth), `user_companies`, `roles`, `companies`
+  - **Dark Mode**: All components must include `dark:` Tailwind classes for proper dark theme support
+  - _Requirements: 2.1, 2.2, 2.4, 12.1, 12.2_
+
+- [x] 3. Build core navigation and layout components
+  - Implement responsive sidebar navigation with Tailwind CSS transitions, collapsible functionality, and dark mode styling using `dark:bg-gray-800`, `dark:text-white` classes
+  - Create header component with company selector dropdown using `app_functions.get_user_companies()` RPC with dark theme support
+  - Build user profile menu with Tailwind styled dropdowns for logout and settings options including `dark:` variants
+  - Implement notification bell with unread count using `get_unread_notifications_count()` function with dark mode compatibility
+  - Create breadcrumb navigation component with Tailwind typography, responsive design, and dark theme colors
+  - Add mobile-responsive navigation with Tailwind hamburger menu and slide-out sidebar with dark mode support
+  - **Dependencies**: `@headlessui/vue`, `lucide-vue-next`, `tailwindcss`, `@tanstack/vue-query`
+  - **Tables Used**: `companies`, `user_companies`, `notifications`, `roles`
+  - **RPC Functions**: `app_functions.get_user_companies()`, `get_unread_notifications_count()`
+  - **Dark Mode**: All navigation components must include comprehensive `dark:` Tailwind classes for seamless dark theme experience
+  - _Requirements: 12.2, 12.3, 12.4, 12.6, 12.7_
+
+- [x] 4. Implement multi-company management system
+  - Create company store with Pinia for company state management and reactive company switching
+  - Implement company selector component with Tailwind styled search functionality, dropdown, and dark mode support using `dark:bg-gray-800`, `dark:border-gray-600` classes
+  - Build company switching logic with context updates affecting all data queries
+  - Create composable for company permissions checking using `app_functions.user_has_permission()`
+  - Implement RPC calls to `app_functions.get_user_companies()` and `app_functions.auth_has_company_access()`
+  - Add company context persistence in local storage with encryption for sensitive data
+  - **Dependencies**: `@tanstack/vue-query`, `pinia`, `tailwindcss`, `@headlessui/vue`
+  - **Tables Used**: `companies`, `user_companies`, `roles`
+  - **RPC Functions**: `app_functions.get_user_companies()`, `app_functions.auth_has_company_access()`, `app_functions.user_has_permission()`
+  - **Dark Mode**: Company selector and related UI components must include `dark:` classes for proper dark theme integration
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+
+- [x] 5. Set up data fetching and caching infrastructure
+  - Configure TanStack Query for data fetching, caching, and background updates
+  - Create base query composables for common CRUD operations on all ERP tables
+  - Implement error handling composable for Supabase errors with user-friendly messages and dark mode compatible styling
+  - Set up optimistic updates for form submissions with rollback on failure
+  - Create loading state management with Tailwind CSS skeleton components including `dark:bg-gray-700` variants
+  - Implement retry logic for failed requests with exponential backoff
+  - **Dependencies**: `@tanstack/vue-query`, `@supabase/supabase-js`, `tailwindcss`
+  - **Integration**: All database tables with RLS policies and real-time subscriptions
+  - **Dark Mode**: Loading skeletons and error messages must include `dark:` Tailwind classes for consistent theming
+  - _Requirements: 11.1, 11.6, 13.1, 13.5_
+
+- [x] 6. Build reusable UI components library
+  - Create DataTable component with Tailwind CSS styling, sorting, filtering, pagination, and comprehensive dark mode support using `dark:bg-gray-800`, `dark:border-gray-600` classes
+  - Implement Modal component with Tailwind responsive sizes, HeadlessUI transitions, and dark theme variants including `dark:bg-gray-900` overlays
+  - Build FormField component with Tailwind form styling, Zod validation, error display, and dark mode input styling with `dark:bg-gray-700`, `dark:text-white` classes
+  - Create Button component with Tailwind variants, loading states, accessibility features, and dark mode button styles
+  - Implement Toast notification system with Tailwind animations for user feedback and dark theme compatible colors
+  - Build Card component with Tailwind shadow, border, responsive design patterns, and dark mode styling using `dark:bg-gray-800`, `dark:border-gray-700`
+  - **Dependencies**: `@headlessui/vue`, `@tanstack/vue-table`, `tailwindcss`, `zod`, `lucide-vue-next`
+  - **Design System**: Consistent Tailwind CSS utility classes and component patterns with comprehensive dark mode support
+  - **Dark Mode**: All UI components must include complete `dark:` class variants for seamless light/dark theme switching
+  - _Requirements: 11.2, 11.3, 11.4_
+
+- [x] 7. Implement dashboard with analytics and charts
+  - Create dashboard layout with Tailwind CSS responsive grid system, card components, and dark mode styling using `dark:bg-gray-900`, `dark:text-white`
+  - Implement sales growth chart using ApexCharts with Tailwind styled containers and dark theme chart configurations
+  - Build inventory value widget with real-time updates using Supabase Realtime and dark mode compatible styling
+  - Create low-stock alerts component with Tailwind styled action buttons, badges, and dark theme variants
+  - Implement exchange rate difference visualization using `calculate_exchange_rate_difference()` function with dark mode chart themes
+  - Add dashboard data fetching using materialized views: `mv_sales_analysis`, `mv_warehouse_stock`, `mv_inventory_revaluation`
+  - **Dependencies**: `apexcharts`, `vue3-apexcharts`, `tailwindcss`, `@tanstack/vue-query`, `dayjs`
+  - **Tables/Views Used**: `mv_sales_analysis`, `mv_warehouse_stock`, `mv_inventory_revaluation`, `exchange_rates`
+  - **RPC Functions**: `calculate_exchange_rate_difference()`, `refresh_all_materialized_views()`
+  - **Dark Mode**: Dashboard cards, charts, and widgets must include `dark:` classes and ApexCharts dark theme configuration
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 8. Build product and inventory management system
+  - Create product form component with Tailwind styling, comprehensive Zod validation for `products` table, and dark mode form styling using `dark:bg-gray-800`, `dark:border-gray-600`
+  - Implement product list view with Tailwind search input, filtering, full-text search using `search_vector`, and dark theme table styling
+  - Build category and brand management components for `categories` and `brands` tables with hierarchical display and dark mode tree view styling
+  - Create stock movement form with warehouse and location selection from `warehouses`, `warehouse_zones`, `storage_locations` with dark theme dropdown styling
+  - Implement serialized item tracking functionality using `is_serialized` field and `product_codes` table with dark mode compatible UI
+  - Add product image upload and management with Supabase Storage integration for `product_images` table and dark theme upload components
+  - **Dependencies**: `@supabase/supabase-js`, `tailwindcss`, `zod`, `@tanstack/vue-query`, `@headlessui/vue`
+  - **Tables Used**: `products`, `brands`, `categories`, `product_images`, `product_codes`, `warehouses`, `warehouse_zones`, `storage_locations`, `stock_ledger`
+  - **SUNAT Catalogs**: `sunat.cat_06_unidades_medida`, `sunat.cat_07_afect_igv`
+  - **Dark Mode**: All inventory management forms, tables, and components must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 5.1, 5.2, 5.3, 5.4_
+
+- [ ] 9. Implement 3D warehouse visualization
+  - Set up Three.js scene with @tresjs/core integration and Tailwind styled controls with dark mode UI panels using `dark:bg-gray-800`
+  - Create warehouse floor plan renderer using `warehouse_zones` coordinates and `vertices` JSONB data with dark theme compatible colors
+  - Implement zone visualization with color-coded stock levels from `warehouse_stock` and `color_hex` field with dark mode adjustments
+  - Build interactive storage location markers using `storage_locations` table with 3D positioning and dark theme info tooltips
+  - Add click handlers for warehouse element details with Tailwind styled info panels including `dark:bg-gray-900`, `dark:text-white` classes
+  - Implement real-time stock level updates in 3D scene using Supabase Realtime on `warehouse_stock_location` with dark mode status indicators
+  - **Dependencies**: `three`, `@tresjs/core`, `tailwindcss`, `@supabase/supabase-js`, `@tanstack/vue-query`
+  - **Tables Used**: `warehouses`, `warehouse_zones`, `storage_locations`, `warehouse_stock`, `warehouse_stock_location`, `products`
+  - **Real-time**: Supabase Realtime subscriptions on `warehouse_stock` and `warehouse_stock_location` tables
+  - **Dark Mode**: 3D controls, info panels, and UI overlays must include `dark:` classes for proper dark theme integration
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
+
+- [ ] 10. Create point of sale (POS) system
+  - Build POS interface with Tailwind responsive design, product search using `search_vector`, barcode scanning, and dark mode styling using `dark:bg-gray-900`
+  - Implement shopping cart functionality with Tailwind styled quantity controls, price management from `price_lists`, and dark theme cart styling
+  - Create customer selection and quick customer registration for `parties` table with `is_customer=true` and dark mode form components
+  - Add payment method selection (cash, card, transfer) with Tailwind styled payment buttons and dark theme button variants
+  - Implement real-time inventory checking during sales using `warehouse_stock` table with dark mode status indicators
+  - Build receipt printing functionality with thermal printer support, PDF generation, and dark theme print preview
+  - Create POS session management (opening/closing cash register) with cash flow tracking and dark mode dashboard styling
+  - **Dependencies**: `tailwindcss`, `@tanstack/vue-query`, `zod`, `@vue-pdf-viewer/viewer`, `@headlessui/vue`
+  - **Tables Used**: `products`, `parties`, `price_lists`, `price_list_items`, `warehouse_stock`, `sales_docs`, `sales_doc_items`
+  - **RPC Functions**: `public.next_document_number()` for document numbering
+  - **Dark Mode**: POS interface, cart, payment buttons, and session management must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 6.1, 6.2, 6.5, 6.6_
+
+- [ ] 11. Implement electronic invoicing system
+  - Create electronic invoice generation using company SOL credentials from `companies.sol_user` and `companies.sol_pass` with dark mode configuration UI
+  - Build XML generation for SUNAT electronic invoicing format using `sales_docs` and `sales_doc_items` data with dark theme status displays
+  - Implement invoice signing with digital certificates stored in `companies.cert_path` and dark mode certificate management interface
+  - Add SUNAT web service integration for invoice submission with status tracking in `greenter_status` field and dark theme progress indicators
+  - Create invoice status tracking (sent, accepted, rejected) using `greenter_xml`, `greenter_cdr`, `greenter_hash` fields with dark mode status badges
+  - Build electronic invoice PDF generation with QR codes and Tailwind styled templates including dark theme PDF viewer
+  - Implement credit note and debit note electronic generation with proper SUNAT document types and dark mode form styling
+  - **Dependencies**: `@supabase/supabase-js`, `tailwindcss`, `@vue-pdf-viewer/viewer`, `dayjs`, `zod`
+  - **Tables Used**: `companies`, `sales_docs`, `sales_doc_items`, `parties`, `products`
+  - **SUNAT Catalogs**: `sunat.cat_10_tipo_documento`, `sunat.cat_07_afect_igv`, `sunat.cat_02_monedas`
+  - **Dark Mode**: Electronic invoicing interface, status tracking, and PDF viewer must include `dark:` Tailwind classes
+  - _Requirements: 6.4, 7.1, 7.2, 7.6_
+
+- [ ] 12. Build purchase entry and management system
+  - Create purchase order form with Tailwind styling, supplier selection from `parties` where `is_supplier=true`, and dark mode form components using `dark:bg-gray-800`
+  - Implement purchase receipt/invoice entry with three-way matching using `purchase_docs` and `purchase_doc_items` with dark theme table styling
+  - Build supplier invoice validation against purchase orders with Zod schema validation and dark mode error display
+  - Add automatic inventory updates from purchase receipts creating entries in `stock_ledger` table with dark theme status indicators
+  - Implement purchase cost allocation and landed cost calculation using `product_purchase_prices` table with dark mode calculation displays
+  - Create purchase analytics and supplier performance tracking with charts and Tailwind styled dashboards including dark theme chart configurations
+  - Build purchase approval workflow with role-based permissions using `app_functions.user_has_permission()` and dark mode workflow UI
+  - **Dependencies**: `tailwindcss`, `@tanstack/vue-query`, `zod`, `apexcharts`, `@headlessui/vue`, `dayjs`
+  - **Tables Used**: `purchase_docs`, `purchase_doc_items`, `parties`, `products`, `stock_ledger`, `product_purchase_prices`, `warehouses`
+  - **SUNAT Catalogs**: `sunat.cat_10_tipo_documento`, `sunat.cat_06_unidades_medida`, `sunat.cat_02_monedas`
+  - **RPC Functions**: `public.next_document_number()`, `app_functions.user_has_permission()`
+  - **Dark Mode**: Purchase forms, analytics dashboards, and approval workflows must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 6.2, 6.3, 6.5, 6.6_
+
+- [ ] 13. Create sales and document management
+  - Build sales document form with Tailwind styling, customer selection from `parties`, dynamic item management, and dark mode form styling using `dark:bg-gray-800`, `dark:border-gray-600`
+  - Create document numbering system using `public.next_document_number()` RPC with `document_series` and `document_counters` and dark theme configuration UI
+  - Add document validation using Zod schemas for `sales_docs` and `sales_doc_items` tables with dark mode error display
+  - Implement document list views with Tailwind styled status filtering, search functionality, and dark theme table styling
+  - Build document detail views with PDF generation capability, Tailwind responsive design, and dark mode PDF viewer
+  - Create sales quotation and order management workflow with status tracking, approval process, and dark theme workflow indicators
+  - **Dependencies**: `tailwindcss`, `@tanstack/vue-query`, `zod`, `@vue-pdf-viewer/viewer`, `@headlessui/vue`, `dayjs`
+  - **Tables Used**: `sales_docs`, `sales_doc_items`, `parties`, `products`, `document_series`, `document_counters`, `price_lists`
+  - **SUNAT Catalogs**: `sunat.cat_10_tipo_documento`, `sunat.cat_06_unidades_medida`, `sunat.cat_07_afect_igv`, `sunat.cat_02_monedas`
+  - **RPC Functions**: `public.next_document_number()`
+  - **Dark Mode**: Sales forms, document lists, PDF viewer, and workflow components must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 6.1, 6.2, 6.3, 6.5, 6.6_
+
+- [ ] 14. Implement SUNAT compliance features
+  - Create Tailwind styled dropdown components populated from SUNAT catalog tables using RPC functions with dark mode dropdown styling using `dark:bg-gray-800`, `dark:border-gray-600`
+  - Build SUNAT report generation using format views: `v_sunat_formato_12_1`, `v_sunat_formato_13_1`, `v_sunat_formato_13_1_resumen_diario` with dark theme report interface
+  - Implement currency selection from `sunat.monedas` materialized view using `get_currencies()` RPC with dark mode selection components
+  - Add document type selection from `sunat.cat_10_tipo_documento` using `get_document_types()` RPC with dark theme dropdown styling
+  - Create unit of measure selection from catalog using `get_unit_measures()` RPC function with dark mode form components
+  - Build PDF export functionality for SUNAT reports with proper formatting, Tailwind styled templates, and dark theme export interface
+  - **Dependencies**: `@tanstack/vue-query`, `tailwindcss`, `@vue-pdf-viewer/viewer`, `xlsx`, `@headlessui/vue`
+  - **SUNAT Tables**: `sunat.cat_10_tipo_documento`, `sunat.cat_06_unidades_medida`, `sunat.cat_07_afect_igv`, `sunat.cat_02_monedas`, `sunat.cat_06_doc_identidad`, `sunat.ubigeo`
+  - **SUNAT Views**: `v_sunat_formato_12_1`, `v_sunat_formato_13_1`, `v_sunat_formato_13_1_resumen_diario`, `v_sunat_inventory_header`
+  - **RPC Functions**: `get_currencies()`, `get_document_types()`, `get_unit_measures()`, `get_tax_affectations()`, `get_identity_document_types()`, `get_ubigeo()`
+  - **Dark Mode**: SUNAT dropdowns, report interface, and export functionality must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+
+- [ ] 15. Build real-time notification system
+  - Create notification store with Pinia for state management and real-time updates
+  - Implement notification list component with Tailwind styled read/unread states, priority indicators, and dark mode styling using `dark:bg-gray-800`, `dark:text-white`
+  - Build notification preferences management interface using `notification_preferences` table with Tailwind forms and dark theme form components
+  - Set up Supabase Realtime subscriptions for `notifications` table with automatic UI updates and dark mode notification styling
+  - Implement notification creation using `create_notification()` function and marking as read with `mark_notification_as_read()` with dark theme status indicators
+  - Add notification bell with real-time unread count updates using `get_unread_notifications_count()` function and dark mode bell styling
+  - **Dependencies**: `@supabase/supabase-js`, `pinia`, `tailwindcss`, `@tanstack/vue-query`, `@headlessui/vue`, `lucide-vue-next`
+  - **Tables Used**: `notifications`, `notification_preferences`, `notification_templates`, `notification_delivery_log`
+  - **RPC Functions**: `create_notification()`, `mark_notification_as_read()`, `get_unread_notifications_count()`, `cleanup_expired_notifications()`
+  - **Real-time**: Supabase Realtime subscriptions on `notifications` table
+  - **Dark Mode**: Notification components, preferences interface, and bell indicator must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
+
+- [ ] 16. Implement advanced reporting and analytics
+  - Create report builder interface with Tailwind styled parameter selection, date range pickers, and dark mode styling using `dark:bg-gray-900`, `dark:text-white`
+  - Build sales analysis charts using `mv_sales_analysis` materialized view with ApexCharts, Tailwind containers, and dark theme chart configurations
+  - Implement inventory revaluation reports using `mv_inventory_revaluation` view with Excel export functionality and dark mode report interface
+  - Create profit simulation dashboard using `mv_sales_profit_simulation` view with comparison charts and dark theme dashboard styling
+  - Add Kardex report generation using `mv_kardex_mensual` view with date range selection, filtering, and dark mode table styling
+  - Implement Excel export functionality using SheetJS with proper SUNAT formatting and Tailwind styled export buttons including dark theme variants
+  - **Dependencies**: `apexcharts`, `xlsx`, `tailwindcss`, `@tanstack/vue-query`, `dayjs`, `@headlessui/vue`, `@vue-pdf-viewer/viewer`
+  - **Materialized Views**: `mv_sales_analysis`, `mv_warehouse_stock`, `mv_kardex_mensual`, `mv_inventory_revaluation`, `mv_sales_profit_simulation`
+  - **RPC Functions**: `refresh_all_materialized_views()`, `refresh_kardex_mensual()`, `calculate_exchange_rate_difference()`
+  - **Dark Mode**: Report builder, charts, dashboards, and export interfaces must include comprehensive `dark:` Tailwind classes and dark theme chart configurations
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6_
+
+- [ ] 17. Build audit trail and system maintenance
+  - Create audit log viewer with Tailwind styled filtering, search capabilities, pagination, and dark mode styling using `dark:bg-gray-800`, `dark:border-gray-600`
+  - Implement activity log display from `audit.activity_log` partitioned table with date range filtering and dark theme table styling
+  - Build system maintenance dashboard for administrators with Tailwind cards, status indicators, and dark mode dashboard components
+  - Add materialized view refresh functionality using `refresh_all_materialized_views()` with progress tracking and dark theme progress indicators
+  - Implement notification cleanup tools using `cleanup_expired_notifications()` with batch processing and dark mode cleanup interface
+  - Create system health monitoring components with real-time metrics, Tailwind styled alerts, and dark theme monitoring displays
+  - **Dependencies**: `tailwindcss`, `@tanstack/vue-query`, `dayjs`, `@headlessui/vue`, `lucide-vue-next`, `apexcharts`
+  - **Tables Used**: `audit.activity_log` (partitioned), `notifications`, materialized views
+  - **RPC Functions**: `refresh_all_materialized_views()`, `cleanup_expired_notifications()`, `maintenance.validate_data_integrity()`, `maintenance.schedule_daily_maintenance()`
+  - **Permissions**: Requires admin permissions via `app_functions.user_has_permission()`
+  - **Dark Mode**: Audit viewer, maintenance dashboard, and system monitoring must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+
+- [ ] 18. Implement form validation and error handling
+  - Create comprehensive Zod validation schemas for all database tables and forms with proper TypeScript types
+  - Implement global error boundary component with Tailwind styled error pages, recovery options, and dark mode error styling using `dark:bg-gray-900`, `dark:text-white`
+  - Build user-friendly error message display system with Tailwind alerts, toast notifications, and dark theme error components
+  - Add form field validation with real-time feedback using Tailwind error states, animations, and dark mode error styling
+  - Implement retry mechanisms for failed operations with exponential backoff, user feedback, and dark theme retry interfaces
+  - Create error logging and reporting functionality integrated with audit system and dark mode logging interface
+  - **Dependencies**: `zod`, `tailwindcss`, `@tanstack/vue-query`, `@headlessui/vue`, `lucide-vue-next`
+  - **Integration**: All form components, API calls, and database operations
+  - **Error Types**: Supabase errors, validation errors, network errors, permission errors
+  - **Dark Mode**: Error pages, alerts, toast notifications, and validation feedback must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 11.6, 13.1, 13.2_
+
+- [ ] 19. Add performance optimizations and caching
+  - Implement lazy loading for route components with Tailwind loading skeletons including dark mode skeleton styling using `dark:bg-gray-700`
+  - Add virtual scrolling for large data tables using `@tanstack/vue-table` with performance optimizations and dark theme table styling
+  - Optimize 3D scene rendering with LOD (Level of Detail) and frustum culling for warehouse visualization with dark theme 3D controls
+  - Implement data caching strategies with TanStack Query for all database operations and materialized views
+  - Add pagination for large datasets from `stock_ledger`, `audit.activity_log`, and other high-volume tables with dark mode pagination controls
+  - Optimize bundle size with code splitting and tree shaking for all dependencies
+  - **Dependencies**: `@tanstack/vue-query`, `@tanstack/vue-table`, `three`, `tailwindcss`, `vite`
+  - **Optimization Targets**: Large tables, 3D rendering, API calls, bundle size, memory usage
+  - **Performance Metrics**: Core Web Vitals, loading times, memory consumption
+  - **Dark Mode**: Loading skeletons, pagination controls, and performance monitoring interfaces must include `dark:` Tailwind classes
+  - _Requirements: 11.1, 11.2_
+
+- [ ] 20. Implement responsive design and mobile support
+  - Ensure all components work on mobile devices using Tailwind CSS responsive utilities, breakpoints, and dark mode mobile styling
+  - Add touch gestures for 3D warehouse navigation with Three.js touch controls, mobile-optimized interactions, and dark theme mobile UI
+  - Implement responsive data tables with horizontal scrolling, Tailwind mobile-first design patterns, and dark mode mobile table styling
+  - Create mobile-optimized forms with better input handling using Tailwind form utilities, touch-friendly controls, and dark theme mobile forms
+  - Add swipe gestures for navigation where appropriate using touch event handlers with dark mode mobile navigation
+  - Test and optimize performance on mobile devices with Tailwind responsive design, mobile-specific optimizations, and dark theme mobile experience
+  - **Dependencies**: `tailwindcss`, `three`, `@tanstack/vue-table`, `@headlessui/vue`, `@tresjs/core`
+  - **Responsive Strategy**: Mobile-first design with Tailwind breakpoints (sm, md, lg, xl, 2xl) and dark mode responsive variants
+  - **Touch Support**: Touch gestures, swipe navigation, mobile-optimized interactions with dark theme support
+  - **Dark Mode**: All mobile components, responsive layouts, and touch interfaces must include comprehensive `dark:` Tailwind classes
+  - _Requirements: 11.4, 12.6_
+
+- [ ] 21. Set up testing infrastructure and write tests
+  - Configure Vitest testing environment with mocks for Supabase, Three.js, and other external dependencies
+  - Write unit tests for all composables, utility functions, and Pinia stores with proper TypeScript support
+  - Create component tests for critical UI components using Vue Test Utils and Tailwind CSS class testing
+  - Implement integration tests for store interactions, API calls, and database operations
+  - Add end-to-end tests for critical user flows including authentication, company switching, and core ERP operations
+  - Set up test coverage reporting and CI integration with proper test data and database seeding
+  - **Dependencies**: `vitest`, `@vue/test-utils`, `@testing-library/vue`, `jsdom`, `@vitest/coverage-v8`
+  - **Test Scope**: All components, stores, composables, API integrations, database operations
+  - **Mock Strategy**: Supabase client, Three.js, external APIs, file uploads, notifications
+  - _Requirements: All requirements - testing ensures quality_
+
+- [ ] 22. Implement security measures and data protection
+  - Add input sanitization for all user inputs with XSS protection and Zod validation
+  - Implement file upload validation and security checks for Supabase Storage with file type and size restrictions
+  - Set up proper authentication guards for all routes using `app_functions.user_has_permission()` and RLS policies
+  - Add permission-based UI component rendering with role-based access control, Tailwind conditional styling, and dark mode security interfaces
+  - Implement secure storage for sensitive data using encrypted fields and proper key management with dark theme security dashboards
+  - Add CSRF protection and other security headers with proper Content Security Policy configuration and dark mode security monitoring
+  - **Dependencies**: `zod`, `@supabase/supabase-js`, `vue-router`, `tailwindcss`
+  - **Security Features**: Input validation, file upload security, authentication guards, permission checks, data encryption
+  - **RLS Integration**: All database tables with proper Row Level Security policies
+  - **Dark Mode**: Security interfaces, monitoring dashboards, and permission controls must include `dark:` Tailwind classes
+  - _Requirements: 2.2, 2.3, 13.2_
+
+- [ ] 23. Final integration and deployment preparation
+  - Integrate all components into cohesive application flow with proper routing and state management
+  - Perform comprehensive testing of all features including POS, electronic invoicing, 3D warehouse, and reporting
+  - Optimize build configuration for production with Vite bundling, Tailwind CSS purging, and asset optimization
+  - Set up environment configuration for different stages (development, staging, production) with proper Supabase settings
+  - Create deployment scripts and documentation for Vercel/Netlify deployment with Supabase integration
+  - Perform final security audit and performance testing with Lighthouse and security scanning tools
+  - **Dependencies**: `vite`, `tailwindcss`, deployment platform, monitoring tools
+  - **Integration Points**: All ERP modules, authentication, real-time features, 3D visualization, reporting
+  - **Production Readiness**: Performance optimization, security hardening, monitoring setup
+  - _Requirements: All requirements - final integration_
