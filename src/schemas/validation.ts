@@ -87,7 +87,7 @@ export const partySchema = z.object({
     .min(1, 'Document number is required')
     .max(20, 'Document number is too long'),
   legal_name: z.string().min(1, 'Legal name is required').max(200, 'Legal name is too long'),
-  commercial_name: z.string().max(200, 'Commercial name is too long').optional(),
+  razon_social: z.string().max(200, 'Commercial name is too long').optional(),
   email: z.string().email('Invalid email address').optional(),
   phone: z.string().max(20, 'Phone number is too long').optional(),
   address: z.string().max(500, 'Address is too long').optional(),

@@ -52,6 +52,7 @@ export const usePermissions = () => {
   const canManageCompanies = computed(() => hasPermission('companies.manage'))
   const canViewWarehouse3D = computed(() => hasPermission('warehouse.3d.view'))
   const canManageWarehouse = computed(() => hasPermission('warehouse.manage'))
+  const canViewPos = computed(() => hasPermission('pos.access'))
 
   // Helper function to check if user is admin
   const isAdmin = computed(() => hasPermission('admin.all'))
@@ -94,5 +95,6 @@ export const usePermissions = () => {
     canViewWarehouse3D,
     canManageWarehouse,
     isAdmin,
+    canViewPos,
   }
 }

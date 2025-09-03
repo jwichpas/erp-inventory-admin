@@ -34,7 +34,9 @@ const requireAuth = async (
     // In development mode, allow access to basic routes without full authentication
     if (
       import.meta.env.DEV &&
-      ['dashboard', 'products', 'inventory', 'sales', 'ui-demo'].includes(to.name as string)
+      ['dashboard', 'products', 'inventory', 'sales', 'purchases', 'ui-demo'].includes(
+        to.name as string,
+      )
     ) {
       console.log('requireAuth: Allowing access in dev mode for route:', to.name)
       next()
@@ -282,7 +284,7 @@ const router = createRouter({
     {
       path: '/purchases',
       name: 'purchases',
-      component: () => import('@/views/purchases/PurchasesView.vue'),
+      component: () => import('@/modules/purchases/views/PurchasesMainView.vue'),
       beforeEnter: [requireCompanyAccess, requirePermission('purchases.view')],
       meta: {
         layout: 'main',
@@ -290,10 +292,128 @@ const router = createRouter({
         permission: 'purchases.view',
       },
     },
+    // Purchase Order Routes
+    {
+      path: '/purchases/orders/new',
+      name: 'purchase-order-new',
+      component: () => import('@/modules/purchases/views/OrderFormView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.create')],
+      meta: {
+        layout: 'main',
+        title: 'Nueva Orden de Compra',
+        permission: 'purchases.create',
+      },
+    },
+    {
+      path: '/purchases/orders/:id/edit',
+      name: 'purchase-order-edit',
+      component: () => import('@/modules/purchases/views/OrderFormView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.edit')],
+      meta: {
+        layout: 'main',
+        title: 'Editar Orden de Compra',
+        permission: 'purchases.edit',
+      },
+    },
+    {
+      path: '/purchases/orders/:id',
+      name: 'purchase-order-view',
+      component: () => import('@/modules/purchases/views/OrderDetailView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.view')],
+      meta: {
+        layout: 'main',
+        title: 'Ver Orden de Compra',
+        permission: 'purchases.view',
+      },
+    },
+    // Purchase Document Routes
+    {
+      path: '/purchases/documents/new',
+      name: 'purchase-document-new',
+      component: () => import('@/modules/purchases/views/DocumentFormView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.create')],
+      meta: {
+        layout: 'main',
+        title: 'Nuevo Documento de Compra',
+        permission: 'purchases.create',
+      },
+    },
+    {
+      path: '/purchases/documents/:id/edit',
+      name: 'purchase-document-edit',
+      component: () => import('@/modules/purchases/views/DocumentFormView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.edit')],
+      meta: {
+        layout: 'main',
+        title: 'Editar Documento de Compra',
+        permission: 'purchases.edit',
+      },
+    },
+    {
+      path: '/purchases/documents/:id',
+      name: 'purchase-document-view',
+      component: () => import('@/modules/purchases/views/DocumentDetailView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.view')],
+      meta: {
+        layout: 'main',
+        title: 'Ver Documento de Compra',
+        permission: 'purchases.view',
+      },
+    },
+    // Purchase Receipt Routes (legacy - redirecting to new reception routes)
+    {
+      path: '/purchases/receipts/new',
+      name: 'purchase-receipt-new',
+      redirect: '/purchases/receptions/new'
+    },
+    {
+      path: '/purchases/receipts/:id/edit',
+      name: 'purchase-receipt-edit',
+      redirect: (to) => `/purchases/receptions/${to.params.id}/edit`
+    },
+    {
+      path: '/purchases/receipts/:id',
+      name: 'purchase-receipt-view',
+      redirect: (to) => `/purchases/receptions/${to.params.id}`
+    },
+    // Purchase Reception Routes (new structure matching SQL flow)
+    {
+      path: '/purchases/receptions/new',
+      name: 'purchase-reception-new',
+      component: () => import('@/modules/purchases/views/ReceptionFormView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.receive')],
+      meta: {
+        layout: 'main',
+        title: 'Nueva Recepción de Mercancía',
+        permission: 'purchases.receive',
+      },
+    },
+    {
+      path: '/purchases/receptions/:id/edit',
+      name: 'purchase-reception-edit',
+      component: () => import('@/modules/purchases/views/ReceptionFormView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.edit')],
+      meta: {
+        layout: 'main',
+        title: 'Editar Recepción de Mercancía',
+        permission: 'purchases.edit',
+      },
+    },
+    {
+      path: '/purchases/receptions/:id',
+      name: 'purchase-reception-view',
+      component: () => import('@/modules/purchases/views/ReceptionDetailView.vue'),
+      beforeEnter: [requireCompanyAccess, requirePermission('purchases.view')],
+      meta: {
+        layout: 'main',
+        title: 'Ver Recepción de Mercancía',
+        permission: 'purchases.view',
+      },
+    },
     {
       path: '/pos',
       name: 'pos',
-      component: () => import('@/views/pos/POSView.vue'),
+      component: () => import('@/views/POSView.vue'),
       beforeEnter: [requireCompanyAccess, requirePermission('pos.access')],
       meta: {
         layout: 'main',

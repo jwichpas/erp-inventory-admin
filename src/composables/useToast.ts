@@ -71,6 +71,11 @@ export const useToast = () => {
     return addToast({ type: 'info', title, message, duration })
   }
 
+  // Convenience function for the POS components that use showToast(message, type)
+  const showToast = (title: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', message?: string, duration?: number) => {
+    return addToast({ type, title, message, duration })
+  }
+
   return {
     toasts: toasts as Readonly<Ref<ToastItem[]>>,
     addToast,
@@ -80,5 +85,6 @@ export const useToast = () => {
     error,
     warning,
     info,
+    showToast,
   }
 }

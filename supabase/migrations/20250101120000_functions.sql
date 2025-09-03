@@ -388,6 +388,8 @@ BEGIN
 END;
 $$;
 
+
+
 -- PASO 4: COMENTARIOS Y DOCUMENTACIÓN
 -- ============================================================================
 
@@ -439,5 +441,426 @@ GRANT EXECUTE ON FUNCTION public.get_user_companies(UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.update_user_company_login(UUID, UUID) TO service_role;
 
 -- ============================================================================
--- FIN DE LA MIGRACIÓN
+-- MIGRACIÓN ADICIONAL: EXTENSIONES PARA ÓRDENES, RECEPCIONES, ENVÍOS, AJUSTES, LOTES/SERIES, PAGOS, DEVOLUCIONES E IMPUESTOS
 -- ============================================================================
+--
+-- Esta migración agrega las tablas y funciones sugeridas para complementar el esquema ERP.
+-- Se integra con las estructuras existentes (e.g., companies, products, warehouses, stock_ledger).
+-- Incluye triggers para automatizar movimientos en stock_ledger donde aplica.
+
+
+-- Trigger para insertar en stock_ledger desde recepciones (entradas)
+CREATE OR REPLACE FUNCTION insert_stock_ledger_from_reception()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_company_id UUID;
+    v_movement_date DATE;
+    v_ref_doc_id UUID;
+    v_ref_doc_type VARCHAR(2);
+    v_ref_doc_series TEXT;
+    v_ref_doc_number TEXT;
+BEGIN
+    SELECT company_id, reception_date INTO v_company_id, v_movement_date FROM receptions WHERE id = NEW.reception_id;
+    -- Asumir referencia de purchase_doc si existe
+    SELECT purchase_doc_id INTO v_ref_doc_id FROM receptions WHERE id = NEW.reception_id;
+    IF v_ref_doc_id IS NOT NULL THEN
+        SELECT doc_type, series, number INTO v_ref_doc_type, v_ref_doc_series, v_ref_doc_number FROM purchase_docs WHERE id = v_ref_doc_id;
+    END IF;
+
+    INSERT INTO stock_ledger (
+        company_id, warehouse_id, product_id, movement_date,
+        ref_doc_type, ref_doc_series, ref_doc_number, operation_type,
+        qty_in, unit_cost_in, total_cost_in,
+        batch_id, serial_numbers,  -- Si aplica
+        source, source_id
+    ) VALUES (
+        v_company_id, (SELECT warehouse_id FROM receptions WHERE id = NEW.reception_id), NEW.product_id, v_movement_date,
+        v_ref_doc_type, v_ref_doc_series, v_ref_doc_number, 'RECEPCION',
+        NEW.quantity_received, NEW.unit_cost, (NEW.quantity_received * NEW.unit_cost),
+        (SELECT id FROM product_batches WHERE batch_number = NEW.batch_number AND product_id = NEW.product_id),  -- Si existe
+        CASE WHEN NEW.serial_number IS NOT NULL THEN ARRAY[NEW.serial_number] ELSE NULL END,
+        'reception_item', NEW.id
+    );
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_insert_stock_ledger_reception
+AFTER INSERT ON reception_items
+FOR EACH ROW
+EXECUTE FUNCTION insert_stock_ledger_from_reception();
+
+
+-- Trigger para insertar en stock_ledger desde envíos (salidas)
+CREATE OR REPLACE FUNCTION insert_stock_ledger_from_shipment()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_company_id UUID;
+    v_warehouse_id UUID;
+    v_movement_date DATE;
+    v_ref_doc_id UUID;
+    v_ref_doc_type VARCHAR(2);
+    v_ref_doc_series TEXT;
+    v_ref_doc_number TEXT;
+    v_unit_cost_out NUMERIC;
+BEGIN
+    SELECT company_id, warehouse_id, shipment_date INTO v_company_id, v_warehouse_id, v_movement_date FROM shipments WHERE id = NEW.shipment_id;
+    SELECT sales_doc_id INTO v_ref_doc_id FROM shipments WHERE id = NEW.shipment_id;
+    IF v_ref_doc_id IS NOT NULL THEN
+        SELECT doc_type, series, number INTO v_ref_doc_type, v_ref_doc_series, v_ref_doc_number FROM sales_docs WHERE id = v_ref_doc_id;
+    END IF;
+
+    -- Calcular costo de salida
+    SELECT new_balance_unit_cost INTO v_unit_cost_out
+    FROM calculate_inventory_balance(v_company_id, NEW.product_id, v_warehouse_id, v_movement_date, 0, NEW.quantity_shipped);
+
+    INSERT INTO stock_ledger (
+        company_id, warehouse_id, product_id, movement_date,
+        ref_doc_type, ref_doc_series, ref_doc_number, operation_type,
+        qty_out, unit_cost_out, total_cost_out,
+        batch_id, serial_numbers,
+        source, source_id
+    ) VALUES (
+        v_company_id, v_warehouse_id, NEW.product_id, v_movement_date,
+        v_ref_doc_type, v_ref_doc_series, v_ref_doc_number, 'ENVIO',
+        NEW.quantity_shipped, v_unit_cost_out, (NEW.quantity_shipped * v_unit_cost_out),
+        (SELECT id FROM product_batches WHERE batch_number = NEW.batch_number AND product_id = NEW.product_id),
+        CASE WHEN NEW.serial_number IS NOT NULL THEN ARRAY[NEW.serial_number] ELSE NULL END,
+        'shipment_item', NEW.id
+    );
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_insert_stock_ledger_shipment
+AFTER INSERT ON shipment_items
+FOR EACH ROW
+EXECUTE FUNCTION insert_stock_ledger_from_shipment();
+
+
+
+-- Trigger para insertar en stock_ledger desde ajustes
+CREATE OR REPLACE FUNCTION insert_stock_ledger_from_adjustment()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_company_id UUID;
+    v_warehouse_id UUID;
+    v_movement_date DATE;
+    v_unit_cost NUMERIC;
+BEGIN
+    SELECT company_id, warehouse_id, adjustment_date INTO v_company_id, v_warehouse_id, v_movement_date FROM inventory_adjustments WHERE id = NEW.adjustment_id;
+
+    IF NEW.quantity_adjustment > 0 THEN
+        -- Entrada
+        INSERT INTO stock_ledger (
+            company_id, warehouse_id, product_id, movement_date,
+            operation_type, qty_in, unit_cost_in, total_cost_in,
+            source, source_id
+        ) VALUES (
+            v_company_id, v_warehouse_id, NEW.product_id, v_movement_date,
+            'AJUSTE_ENTRADA', NEW.quantity_adjustment, COALESCE(NEW.unit_cost, 0), (NEW.quantity_adjustment * COALESCE(NEW.unit_cost, 0)),
+            'adjustment_item', NEW.id
+        );
+    ELSIF NEW.quantity_adjustment < 0 THEN
+        -- Salida: Calcular costo
+        SELECT new_balance_unit_cost INTO v_unit_cost
+        FROM calculate_inventory_balance(v_company_id, NEW.product_id, v_warehouse_id, v_movement_date, 0, -NEW.quantity_adjustment);
+
+        INSERT INTO stock_ledger (
+            company_id, warehouse_id, product_id, movement_date,
+            operation_type, qty_out, unit_cost_out, total_cost_out,
+            source, source_id
+        ) VALUES (
+            v_company_id, v_warehouse_id, NEW.product_id, v_movement_date,
+            'AJUSTE_SALIDA', -NEW.quantity_adjustment, v_unit_cost, (-NEW.quantity_adjustment * v_unit_cost),
+            'adjustment_item', NEW.id
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_insert_stock_ledger_adjustment
+AFTER INSERT ON adjustment_items
+FOR EACH ROW
+EXECUTE FUNCTION insert_stock_ledger_from_adjustment();
+
+
+
+-- Trigger para insertar en stock_ledger desde devoluciones (inverso: entrada para ventas, salida para compras)
+CREATE OR REPLACE FUNCTION insert_stock_ledger_from_return()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_company_id UUID;
+    v_warehouse_id UUID;
+    v_movement_date DATE;
+    v_doc_type TEXT;
+    v_unit_cost NUMERIC;
+BEGIN
+    SELECT company_id, warehouse_id, return_date, doc_type INTO v_company_id, v_warehouse_id, v_movement_date, v_doc_type FROM returns WHERE id = NEW.return_id;
+
+    IF v_doc_type = 'SALE_RETURN' THEN
+        -- Entrada (devolución de venta)
+        SELECT new_balance_unit_cost INTO v_unit_cost
+        FROM calculate_inventory_balance(v_company_id, NEW.product_id, v_warehouse_id, v_movement_date, NEW.quantity_returned, 0);
+
+        INSERT INTO stock_ledger (
+            company_id, warehouse_id, product_id, movement_date,
+            operation_type, qty_in, unit_cost_in, total_cost_in,
+            source, source_id
+        ) VALUES (
+            v_company_id, v_warehouse_id, NEW.product_id, v_movement_date,
+            'DEVOLUCION_VENTA', NEW.quantity_returned, v_unit_cost, (NEW.quantity_returned * v_unit_cost),
+            'return_item', NEW.id
+        );
+    ELSIF v_doc_type = 'PURCHASE_RETURN' THEN
+        -- Salida (devolución de compra)
+        SELECT new_balance_unit_cost INTO v_unit_cost
+        FROM calculate_inventory_balance(v_company_id, NEW.product_id, v_warehouse_id, v_movement_date, 0, NEW.quantity_returned);
+
+        INSERT INTO stock_ledger (
+            company_id, warehouse_id, product_id, movement_date,
+            operation_type, qty_out, unit_cost_out, total_cost_out,
+            source, source_id
+        ) VALUES (
+            v_company_id, v_warehouse_id, NEW.product_id, v_movement_date,
+            'DEVOLUCION_COMPRA', NEW.quantity_returned, v_unit_cost, (NEW.quantity_returned * v_unit_cost),
+            'return_item', NEW.id
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_insert_stock_ledger_return
+AFTER INSERT ON return_items
+FOR EACH ROW
+EXECUTE FUNCTION insert_stock_ledger_from_return();
+
+
+-- PASO 8: FUNCIONES ADICIONALES
+-- ============================================================================
+
+-- Función para validar stock disponible (usar en triggers de ventas/envíos)
+CREATE OR REPLACE FUNCTION check_stock_availability(
+    p_product_id UUID,
+    p_warehouse_id UUID,
+    p_quantity NUMERIC
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_available NUMERIC;
+BEGIN
+    SELECT balance_qty INTO v_available FROM warehouse_stock WHERE product_id = p_product_id AND warehouse_id = p_warehouse_id;
+    IF v_available < p_quantity THEN
+        RAISE EXCEPTION 'Stock insuficiente para producto % en almacén %: disponible %', p_product_id, p_warehouse_id, v_available;
+    END IF;
+    RETURN TRUE;
+END;
+$$;
+
+-- Función para generar reporte SUNAT 13.1 (Kardex Valorado)
+CREATE OR REPLACE FUNCTION generate_sunat_13_1_report(
+    p_company_id UUID,
+    p_period DATE  -- e.g., '2025-09-01' para septiembre 2025
+)
+RETURNS TABLE (
+    product_id UUID,
+    movement_date DATE,
+    ref_doc_type VARCHAR(2),
+    ref_doc_series TEXT,
+    ref_doc_number TEXT,
+    operation_type VARCHAR(2),
+    qty_in NUMERIC,
+    unit_cost_in NUMERIC,
+    total_cost_in NUMERIC,
+    qty_out NUMERIC,
+    unit_cost_out NUMERIC,
+    total_cost_out NUMERIC,
+    balance_qty NUMERIC,
+    balance_unit_cost NUMERIC,
+    balance_total_cost NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        sl.product_id,
+        sl.movement_date,
+        sl.ref_doc_type,
+        sl.ref_doc_series,
+        sl.ref_doc_number,
+        sl.operation_type,
+        sl.qty_in,
+        sl.unit_cost_in,
+        sl.total_cost_in,
+        sl.qty_out,
+        sl.unit_cost_out,
+        sl.total_cost_out,
+        sl.balance_qty,
+        sl.balance_unit_cost,
+        sl.balance_total_cost
+    FROM stock_ledger sl
+    WHERE sl.company_id = p_company_id
+      AND DATE_TRUNC('month', sl.movement_date) = DATE_TRUNC('month', p_period)
+    ORDER BY sl.product_id, sl.movement_date, sl.created_at;
+END;
+$$;
+
+-- Función para exportar valoración de inventario
+CREATE OR REPLACE FUNCTION export_inventory_valuation(
+    p_company_id UUID,
+    p_as_of_date DATE DEFAULT CURRENT_DATE
+)
+RETURNS TABLE (
+    warehouse_id UUID,
+    product_id UUID,
+    balance_qty NUMERIC,
+    balance_unit_cost NUMERIC,
+    total_value NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        sl.warehouse_id,
+        sl.product_id,
+        sl.balance_qty,
+        sl.balance_unit_cost,
+        sl.balance_total_cost AS total_value
+    FROM stock_ledger sl
+    WHERE sl.company_id = p_company_id
+      AND sl.movement_date <= p_as_of_date
+      AND sl.balance_qty > 0
+    ORDER BY sl.warehouse_id, sl.product_id;
+END;
+$$;
+
+-- Función para recalcular todos los saldos en stock_ledger
+CREATE OR REPLACE FUNCTION recalculate_all_ledger_balances(
+    p_company_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    rec RECORD;
+BEGIN
+    FOR rec IN
+        SELECT id, movement_date FROM stock_ledger WHERE company_id = p_company_id ORDER BY movement_date, created_at
+    LOOP
+        UPDATE stock_ledger
+        SET balance_qty = (SELECT balance_qty FROM compute_stock_ledger_balances() WHERE id = rec.id),  -- Asumir extensión de la función existente
+            balance_unit_cost = (SELECT balance_unit_cost FROM compute_stock_ledger_balances() WHERE id = rec.id),
+            balance_total_cost = (SELECT balance_total_cost FROM compute_stock_ledger_balances() WHERE id = rec.id)
+        WHERE id = rec.id;
+    END LOOP;
+END;
+$$;
+
+-- Función para simular movimiento de inventario (sin insertar)
+CREATE OR REPLACE FUNCTION simulate_inventory_movement(
+    p_company_id UUID,
+    p_product_id UUID,
+    p_warehouse_id UUID,
+    p_movement_date DATE,
+    p_qty_in NUMERIC DEFAULT 0,
+    p_qty_out NUMERIC DEFAULT 0,
+    p_unit_cost_in NUMERIC DEFAULT NULL
+)
+RETURNS TABLE (
+    simulated_balance_qty NUMERIC,
+    simulated_balance_unit_cost NUMERIC,
+    simulated_balance_total_cost NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT * FROM calculate_inventory_balance(p_company_id, p_product_id, p_warehouse_id, p_movement_date, p_qty_in, p_qty_out, p_unit_cost_in);
+END;
+$$;
+
+
+-- Función para purgar particiones antiguas de stock_ledger
+CREATE OR REPLACE FUNCTION purge_old_ledger_partitions(
+    retention_months INTEGER DEFAULT 24
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    cutoff_date DATE := CURRENT_DATE - (retention_months || ' months')::INTERVAL;
+    part_name TEXT;
+BEGIN
+    FOR part_name IN
+        SELECT tablename FROM pg_tables WHERE schemaname = 'partitions' AND tablename LIKE 'stock_ledger_%' AND RIGHT(tablename, 7) < TO_CHAR(cutoff_date, 'YYYY_MM')
+    LOOP
+        EXECUTE 'DROP TABLE IF EXISTS partitions.' || part_name;
+    END LOOP;
+END;
+$$;
+
+-- Función para validar consistencia de stock
+CREATE OR REPLACE FUNCTION validate_stock_consistency(
+    p_company_id UUID
+)
+RETURNS TABLE (
+    product_id UUID,
+    warehouse_id UUID,
+    calculated_balance NUMERIC,
+    stored_balance NUMERIC,
+    discrepancy NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ws.product_id,
+        ws.warehouse_id,
+        (SELECT SUM(qty_in - qty_out) FROM stock_ledger WHERE product_id = ws.product_id AND warehouse_id = ws.warehouse_id) AS calculated,
+        ws.balance_qty AS stored,
+        (calculated - ws.balance_qty) AS discrepancy
+    FROM warehouse_stock ws
+    WHERE ws.balance_qty <> calculated AND company_id = p_company_id;  -- Solo discrepancias
+END;
+$$;
+
+-- PASO 9: CONFIGURACIÓN DE RLS PARA NUEVAS TABLAS
+-- ============================================================================
+
+
+
+-- Políticas RLS genéricas (similares a las existentes)
+CREATE POLICY access_policy ON purchase_orders FOR ALL USING (EXISTS (SELECT 1 FROM user_companies WHERE company_id = purchase_orders.company_id AND user_id = auth.uid() AND is_active));
+-- Repetir para otras tablas nuevas, adaptando según necesidad.
+
+-- Fin de la migración adicional.

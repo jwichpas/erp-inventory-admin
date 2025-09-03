@@ -10,7 +10,7 @@ TRUNCATE TABLE
     public.branches,
     public.warehouses,
     public.warehouse_zones,
-    public.storage_locations,
+    --public.storage_locations,
     public.parties,
     public.party_contacts,
     public.brands,
@@ -24,7 +24,7 @@ TRUNCATE TABLE
     public.sales_doc_items,
     public.stock_ledger,
     public.warehouse_stock,
-    public.warehouse_stock_location,
+    -- public.warehouse_stock_location,
     public.exchange_rates
     RESTART IDENTITY CASCADE;
 
@@ -34,6 +34,7 @@ TRUNCATE TABLE
 INSERT INTO sunat.cat_02_monedas (code, descripcion) VALUES
 ('PEN', 'Soles'),
 ('USD', 'Dólares Americanos');
+('CLP', 'Pesos Chilenos');
 
 INSERT INTO sunat.cat_06_doc_identidad (code, descripcion) VALUES
 ('1', 'DNI'),
@@ -86,8 +87,8 @@ VALUES ('123e4567-e89b-12d3-a456-426614174002', '123e4567-e89b-12d3-a456-4266141
 INSERT INTO public.warehouse_zones (id, company_id, warehouse_id, code, name)
 VALUES ('123e4567-e89b-12d3-a456-426614174003', '123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174002', 'ZONA-A', 'Zona de Picking');
 
-INSERT INTO public.storage_locations (company_id, warehouse_id, zone_id, code, name)
-VALUES ('123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174002', '123e4567-e89b-12d3-a456-426614174003', 'A01-R01-S01', 'Estante 1, Nivel 1');
+/* INSERT INTO public.storage_locations (company_id, warehouse_id, zone_id, code, name)
+VALUES ('123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174002', '123e4567-e89b-12d3-a456-426614174003', 'A01-R01-S01', 'Estante 1, Nivel 1'); */
 
 -- PASO 4: PRODUCTOS, MARCAS Y CATEGORÍAS
 -- ============================================================================
@@ -126,30 +127,10 @@ INSERT INTO public.exchange_rates (rate_date, from_currency_code, to_currency_co
 VALUES
     (CURRENT_DATE - 1, 'USD', 'PEN', 3.75),
     (CURRENT_DATE, 'USD', 'PEN', 3.78);
+    (CURRENT_DATE - 2, 'CLP', 'PEN', 0.00366),
+    (CURRENT_DATE - 1, 'CLP', 'PEN', 0.00364),
+    (CURRENT_DATE, 'CLP', 'PEN', 0.00365);
 
 -- PASO 8: COMPRAS (ESTO GENERARÁ MOVIMIENTOS DE INVENTARIO)
 -- ============================================================================
 
--- Documento de Compra en USD
-INSERT INTO public.purchase_docs (id, company_id, supplier_id, doc_type, series, number, issue_date, currency_code, exchange_rate, total)
-VALUES ('123e4567-e89b-12d3-a456-426614174011', '123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174009', '01', 'F001', '123', CURRENT_DATE, 'USD', 3.75, 1100.00);
-
-INSERT INTO public.purchase_doc_items (company_id, purchase_doc_id, product_id, description, unit_code, quantity, unit_cost, total_line)
-VALUES
-    ('123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174011', '123e4567-e89b-12d3-a456-426614174006', 'Laptop Gamer XYZ', 'NIU', 10, 1000.00, 10000.00),
-    ('123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174011', '123e4567-e89b-12d3-a456-426614174007', 'Mouse Inalámbrico', 'NIU', 50, 20.00, 1000.00);
-
--- PASO 9: VENTAS (ESTO GENERARÁ MOVIMIENTOS DE INVENTARIO)
--- ============================================================================
-
--- Documento de Venta en PEN
-INSERT INTO public.sales_docs (id, company_id, customer_id, doc_type, series, number, issue_date, currency_code, exchange_rate, total)
-VALUES ('123e4567-e89b-12d3-a456-426614174012', '123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174008', '03', 'B001', '1', CURRENT_DATE, 'PEN', 1.00, 4580.00);
-
-INSERT INTO public.sales_doc_items (company_id, sales_doc_id, product_id, description, unit_code, quantity, unit_price, total_line)
-VALUES
-    ('123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174012', '123e4567-e89b-12d3-a456-426614174006', 'Laptop Gamer XYZ', 'NIU', 1, 4500.00, 4500.00),
-    ('123e4567-e89b-12d3-a456-426614174000', '123e4567-e89b-12d3-a456-426614174012', '123e4567-e89b-12d3-a456-426614174007', 'Mouse Inalámbrico', 'NIU', 1, 80.00, 80.00);
-
-
--- Fin del script de datos de prueba

@@ -4,7 +4,7 @@ export interface Company {
   id: string
   ruc: string
   legal_name: string
-  commercial_name?: string
+  trade_name?: string
   currency_code: string
   valuation_method: 'PROMEDIO_MOVIL' | 'FIFO' | 'LIFO'
   sol_user?: string
@@ -194,8 +194,9 @@ export interface Party {
   company_id: string
   document_type: string
   document_number: string
-  name: string
-  commercial_name?: string
+  nombres: string
+  razon_social: string
+  fullname: string
   email?: string
   phone?: string
   address?: string
@@ -267,6 +268,7 @@ export interface SalesDocumentItem {
   updated_at: string
 }
 
+// Enhanced Purchase Document Types based on database schema
 export interface PurchaseDocument {
   id: string
   company_id: string
@@ -274,29 +276,257 @@ export interface PurchaseDocument {
   doc_type: string
   series: string
   number: string
-  receipt_date: string
-  due_date?: string
+  issue_date: string
+  arrival_date?: string
   currency_code: string
-  exchange_rate: number
-  subtotal: number
-  igv_amount: number
+  exchange_rate?: number
+  op_type?: string
+  total_ope_gravadas: number
+  total_ope_exoneradas: number
+  total_ope_inafectas: number
+  total_igv: number
+  total_isc: number
+  total_descuentos: number
+  total_otros_cargos: number
   total: number
-  status: 'DRAFT' | 'RECEIVED' | 'PAID' | 'CANCELLED'
+  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'RECEIVED' | 'REJECTED' | 'CANCELLED'
   created_at: string
   updated_at: string
 }
 
 export interface PurchaseDocumentItem {
   id: string
+  company_id: string
   purchase_doc_id: string
   product_id: string
+  description?: string
+  unit_code: string
   quantity: number
   unit_cost: number
-  discount_amount: number
+  discount_pct: number
+  igv_affectation: string
   igv_amount: number
-  total_amount: number
+  isc_amount: number
+  total_line: number
+  created_at: string
+}
+
+// Purchase Order Types
+export interface PurchaseOrder {
+  id: string
+  company_id: string
+  supplier_id: string
+  order_number: string
+  order_date: string
+  requested_date?: string
+  expected_date?: string
+  warehouse_id?: string
+  currency_code: string
+  exchange_rate?: number
+  subtotal: number
+  igv_amount: number
+  total: number
+  notes?: string
+  status: 'DRAFT' | 'SENT' | 'CONFIRMED' | 'PARTIAL' | 'COMPLETED' | 'CANCELLED'
+  approval_status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  approved_by?: string
+  approved_at?: string
+  created_by: string
   created_at: string
   updated_at: string
+}
+
+export interface PurchaseOrderItem {
+  id: string
+  company_id: string
+  purchase_order_id: string
+  product_id: string
+  description?: string
+  unit_code: string
+  quantity_ordered: number
+  quantity_received: number
+  quantity_pending: number
+  unit_cost: number
+  discount_pct: number
+  igv_affectation: string
+  igv_amount: number
+  total_line: number
+  notes?: string
+  created_at: string
+}
+
+// Purchase Receipt/Invoice Matching
+export interface PurchaseReceipt {
+  id: string
+  company_id: string
+  purchase_order_id?: string
+  supplier_id: string
+  warehouse_id: string
+  receipt_number: string
+  receipt_date: string
+  reference_document?: string
+  notes?: string
+  status: 'DRAFT' | 'CONFIRMED' | 'CANCELLED'
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PurchaseReceiptItem {
+  id: string
+  purchase_receipt_id: string
+  purchase_order_item_id?: string
+  product_id: string
+  unit_code: string
+  quantity_received: number
+  quality_notes?: string
+  batch_number?: string
+  expiration_date?: string
+  created_at: string
+}
+
+// Purchase Analytics Types
+export interface SupplierPerformance {
+  supplier_id: string
+  supplier_name: string
+  total_orders: number
+  total_amount: number
+  avg_delivery_days: number
+  on_time_delivery_rate: number
+  quality_score: number
+  last_order_date?: string
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED'
+}
+
+export interface PurchaseAnalytics {
+  period: string
+  total_orders: number
+  total_amount: number
+  avg_order_value: number
+  pending_orders: number
+  completed_orders: number
+  top_suppliers: SupplierPerformance[]
+  spending_by_category: Array<{
+    category_id: string
+    category_name: string
+    amount: number
+    percentage: number
+  }>
+}
+
+// Cost Allocation Types
+export interface LandedCost {
+  id: string
+  company_id: string
+  purchase_doc_id: string
+  shipping_cost: number
+  insurance_cost: number
+  customs_duties: number
+  handling_fees: number
+  other_costs: number
+  total_additional_costs: number
+  allocation_method: 'PROPORTIONAL' | 'WEIGHT' | 'VOLUME' | 'MANUAL'
+  created_at: string
+  updated_at: string
+}
+
+export interface LandedCostAllocation {
+  id: string
+  landed_cost_id: string
+  product_id: string
+  original_cost: number
+  allocated_additional_cost: number
+  final_unit_cost: number
+  quantity: number
+  total_final_cost: number
+}
+
+// Purchase Price History
+export interface ProductPurchasePrice {
+  id: string
+  company_id: string
+  product_id: string
+  supplier_id: string
+  currency_code: string
+  unit_price: number
+  observed_at: string
+  source_doc_type?: string
+  source_doc_series?: string
+  source_doc_number?: string
+  created_at: string
+}
+
+// Purchase Order Types (moved from purchases.ts to avoid circular imports)
+export interface PurchaseOrder {
+  id: string
+  company_id: string
+  supplier_id: string
+  order_number: string
+  order_date: string
+  requested_date?: string
+  expected_date?: string
+  warehouse_id?: string
+  currency_code: string
+  exchange_rate?: number
+  subtotal: number
+  igv_amount: number
+  total: number
+  notes?: string
+  status: 'DRAFT' | 'SENT' | 'CONFIRMED' | 'PARTIAL' | 'COMPLETED' | 'CANCELLED'
+  approval_status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  approved_by?: string
+  approved_at?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PurchaseOrderItem {
+  id: string
+  company_id: string
+  purchase_order_id: string
+  product_id: string
+  description?: string
+  unit_code: string
+  quantity_ordered: number
+  quantity_received: number
+  quantity_pending: number
+  unit_cost: number
+  discount_pct: number
+  igv_affectation: string
+  igv_amount: number
+  total_line: number
+  notes?: string
+  created_at: string
+}
+
+// Purchase Analytics Types
+export interface SupplierPerformance {
+  supplier_id: string
+  supplier_name: string
+  total_orders: number
+  total_amount: number
+  avg_delivery_days: number
+  on_time_delivery_rate: number
+  quality_score: number
+  last_order_date?: string
+  status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED'
+}
+
+export interface PurchaseAnalytics {
+  period: string
+  total_orders: number
+  total_amount: number
+  avg_order_value: number
+  pending_orders: number
+  completed_orders: number
+  top_suppliers: SupplierPerformance[]
+  spending_by_category: Array<{
+    category_id: string
+    category_name: string
+    amount: number
+    percentage: number
+  }>
 }
 
 // Stock and inventory types

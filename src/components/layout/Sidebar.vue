@@ -90,7 +90,8 @@
     </nav>
 
     <!-- Environment Indicator -->
-    <div v-if="!authStore.isAuthenticated" class="absolute bottom-16 left-0 right-0 p-3 bg-yellow-50 border-t border-yellow-200">
+    <div v-if="!authStore.isAuthenticated"
+      class="absolute bottom-16 left-0 right-0 p-3 bg-yellow-50 border-t border-yellow-200">
       <div class="text-xs text-yellow-800">
         <div class="font-medium">🔧 Development Mode</div>
         <div class="text-yellow-700">Using real Supabase data</div>
@@ -141,6 +142,7 @@ import {
   Building as BuildingIcon,
   X as XIcon,
   Palette as PaletteIcon,
+  CreditCard as CreditCardIcon,
 } from 'lucide-vue-next'
 
 interface Props {
@@ -175,6 +177,12 @@ const navigationItems = [
     href: '/products',
     icon: BoxIcon,
     permission: 'products.view'
+  },
+  {
+    name: 'Punto de Venta',
+    href: '/pos',
+    icon: CreditCardIcon,
+    permission: 'pos.access'
   },
   {
     name: 'Ventas',
@@ -230,16 +238,16 @@ const developmentItems = [
 const visibleNavigationItems = computed(() => {
   // In development mode, show basic routes even without full authentication
   if (import.meta.env.DEV && !authStore.isAuthenticated) {
-    return navigationItems.filter(item => 
+    return navigationItems.filter(item =>
       ['dashboard.view', 'products.view', 'inventory.view', 'sales.view'].includes(item.permission)
     )
   }
-  
+
   // If user is authenticated, show all navigation items regardless of permissions
   if (authStore.isAuthenticated) {
     return navigationItems
   }
-  
+
   return navigationItems.filter(item =>
     !item.permission || permissions.hasPermission(item.permission)
   )
@@ -248,7 +256,7 @@ const visibleNavigationItems = computed(() => {
 const visibleManagementItems = computed(() => {
   // Only show management items when fully authenticated
   if (!authStore.isAuthenticated) return []
-  
+
   // If user is authenticated, show all management items regardless of permissions
   return managementItems
 })
@@ -258,7 +266,7 @@ const visibleDevelopmentItems = computed(() => {
   if (import.meta.env.DEV) {
     return developmentItems
   }
-  
+
   return developmentItems.filter(item =>
     !item.permission || permissions.hasPermission(item.permission)
   )

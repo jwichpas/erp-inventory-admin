@@ -93,6 +93,7 @@ SELECT item_code as code, description as descripcion
 FROM sunat.catalogs
 WHERE catalog_code = '06' AND is_active = true;
 
+
 CREATE UNIQUE INDEX ON sunat.doc_identidad (code);
 
 CREATE MATERIALIZED VIEW sunat.monedas AS
@@ -594,6 +595,42 @@ CREATE TABLE product_location (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- PASO 4: TABLAS PARA LOTES Y SERIES
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS product_batches (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    batch_number TEXT NOT NULL,
+    manufacture_date DATE,
+    expiry_date DATE,
+    qty_initial NUMERIC(18,6) NOT NULL,
+    qty_available NUMERIC(18,6) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(product_id, batch_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_batches_product ON product_batches(product_id);
+CREATE TRIGGER update_product_batches_updated_at BEFORE UPDATE ON product_batches FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS product_serials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    serial_number TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'SOLD', 'RETURNED', 'DEFECTIVE')),
+    purchase_date DATE,
+    sale_date DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(product_id, serial_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_serials_product ON product_serials(product_id);
+CREATE TRIGGER update_product_serials_updated_at BEFORE UPDATE ON product_serials FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
 -- PASO 10: LISTAS DE PRECIOS (DE VERSIÓN BASE)
 -- ============================================================================
 
@@ -620,6 +657,58 @@ CREATE TABLE IF NOT EXISTS price_list_items (
   valid_to date,
   unique(price_list_id, product_id, valid_from)
 );
+
+-- PASO 5: TABLAS PARA PAGOS Y CUENTAS POR COBRAR/PAGAR
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    doc_type TEXT NOT NULL CHECK (doc_type IN ('SALE', 'PURCHASE')),  -- Venta o Compra
+    doc_id UUID NOT NULL,  -- Referencia a sales_docs o purchase_docs
+    payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    amount NUMERIC(18,6) NOT NULL,
+    currency_code VARCHAR(3) NOT NULL REFERENCES sunat.cat_02_monedas(code),
+    payment_method TEXT NOT NULL,  -- e.g., 'CASH', 'BANK_TRANSFER'
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_doc ON payments(doc_type, doc_id);
+CREATE TRIGGER update_payments_updated_at BEFORE UPDATE ON payments FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+
+-- PASO 6: TABLAS PARA DEVOLUCIONES
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS returns (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
+    doc_type TEXT NOT NULL CHECK (doc_type IN ('SALE_RETURN', 'PURCHASE_RETURN')),
+    original_doc_id UUID NOT NULL,  -- Referencia a sales_docs o purchase_docs
+    return_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_returns_doc ON returns(doc_type, original_doc_id);
+CREATE TRIGGER update_returns_updated_at BEFORE UPDATE ON returns FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS return_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    return_id UUID NOT NULL REFERENCES returns(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity_returned NUMERIC(18,6) NOT NULL,
+    unit_cost NUMERIC(18,6),  -- Para devoluciones de compra
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 
 -- PASO 11: VEHÍCULOS Y CONDUCTORES (DE VERSIÓN BASE)
 -- ============================================================================
@@ -669,13 +758,43 @@ CREATE TABLE vehicle_drivers (
 
 -- PASO 12: DOCUMENTOS DE VENTAS Y COMPRAS (FUSIONADO)
 -- ============================================================================
+-- Órdenes de venta
+CREATE TABLE IF NOT EXISTS sales_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+    customer_id UUID NOT NULL REFERENCES parties(id) ON DELETE RESTRICT,
+    order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    expected_delivery_date DATE,
+    currency_code VARCHAR(3) NOT NULL REFERENCES sunat.cat_02_monedas(code),
+    exchange_rate NUMERIC(18,6),
+    total_amount NUMERIC(18,6) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'SHIPPED', 'CANCELLED')),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sales_orders_company_status ON sales_orders(company_id, status);
+CREATE TRIGGER update_sales_orders_updated_at BEFORE UPDATE ON sales_orders FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS sales_order_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sales_order_id UUID NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity NUMERIC(18,6) NOT NULL,
+    unit_price NUMERIC(18,6) NOT NULL,
+    discount_pct NUMERIC(18,6) DEFAULT 0,
+    total_line NUMERIC(18,6) GENERATED ALWAYS AS (quantity * unit_price * (1 - discount_pct / 100)) STORED,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS sales_docs (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
   branch_id uuid references branches(id) on delete set null,
   customer_id uuid not null references parties(id) on delete restrict,
-  doc_type varchar(2) not null, -- Factura/Boleta, etc.
+  doc_type varchar(2) references sunat.cat_10_tipo_documento(code), -- Factura/Boleta, etc.
   series text not null,
   number bigint not null,
   issue_date date not null,
@@ -728,6 +847,97 @@ CREATE TABLE IF NOT EXISTS sales_doc_items (
 
 CREATE INDEX IF NOT EXISTS idx_sales_doc_items_doc_line ON sales_doc_items (sales_doc_id, line_number);
 
+-- Envíos (afecta stock al enviar mercancía de ventas)
+CREATE TABLE IF NOT EXISTS shipments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
+    sales_doc_id UUID REFERENCES sales_docs(id) ON DELETE SET NULL,
+    sales_order_id UUID REFERENCES sales_orders(id) ON DELETE SET NULL,
+    shipment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status TEXT NOT NULL DEFAULT 'SHIPPED' CHECK (status IN ('PARTIAL', 'COMPLETE', 'RETURNED')),
+    vehicle_id UUID REFERENCES vehicles(id),
+    driver_id UUID REFERENCES drivers(id),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_shipments_warehouse_status ON shipments(warehouse_id, status);
+CREATE TRIGGER update_shipments_updated_at BEFORE UPDATE ON shipments FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS shipment_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    shipment_id UUID NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity_shipped NUMERIC(18,6) NOT NULL,
+    batch_number TEXT,
+    serial_number TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+-- Órdenes de compra (pendientes antes de facturas/recepciones)
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+    supplier_id UUID NOT NULL REFERENCES parties(id) ON DELETE RESTRICT,
+    order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    expected_delivery_date DATE,
+    currency_code VARCHAR(3) NOT NULL REFERENCES sunat.cat_02_monedas(code),
+    exchange_rate NUMERIC(18,6),
+    total_amount NUMERIC(18,6) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'RECEIVED', 'CANCELLED')),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_company_status ON purchase_orders(company_id, status);
+CREATE TRIGGER update_purchase_orders_updated_at BEFORE UPDATE ON purchase_orders FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    purchase_order_id UUID NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity NUMERIC(18,6) NOT NULL,
+    unit_price NUMERIC(18,6) NOT NULL,
+    discount_pct NUMERIC(18,6) DEFAULT 0,
+    total_line NUMERIC(18,6) GENERATED ALWAYS AS (quantity * unit_price * (1 - discount_pct / 100)) STORED,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Recepciones (afecta stock al recibir mercancía de compras)
+CREATE TABLE IF NOT EXISTS receptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
+    purchase_doc_id UUID ,
+    purchase_order_id UUID REFERENCES purchase_orders(id) ON DELETE SET NULL,
+    reception_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status TEXT NOT NULL DEFAULT 'RECEIVED' CHECK (status IN ('PARTIAL', 'COMPLETE', 'REJECTED')),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_receptions_warehouse_status ON receptions(warehouse_id, status);
+CREATE TRIGGER update_receptions_updated_at BEFORE UPDATE ON receptions FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS reception_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reception_id UUID NOT NULL REFERENCES receptions(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity_received NUMERIC(18,6) NOT NULL,
+    unit_cost NUMERIC(18,6) NOT NULL,
+    batch_number TEXT,  -- Opcional para lotes
+    serial_number TEXT, -- Opcional para series
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS purchase_docs (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
@@ -750,6 +960,7 @@ CREATE TABLE IF NOT EXISTS purchase_docs (
   total numeric(18,6) not null,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
+  deleted_at TIMESTAMPTZ,
   unique(company_id, doc_type, series, number)
 );
 
@@ -773,6 +984,21 @@ CREATE TABLE IF NOT EXISTS purchase_doc_items (
   created_at timestamptz default now()
 );
 
+
+-- TABLA PARA DETALLES DE IMPUESTOS (POR LÍNEA)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS tax_details (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    doc_type TEXT NOT NULL CHECK (doc_type IN ('SALE_ITEM', 'PURCHASE_ITEM')),  -- Referencia a sales_doc_items o purchase_doc_items
+    doc_item_id UUID NOT NULL,
+    tax_type VARCHAR(2) NOT NULL REFERENCES sunat.cat_07_afect_igv(code),  -- e.g., IGV, ISC
+    rate NUMERIC(5,4) NOT NULL,  -- e.g., 0.18 para 18%
+    amount NUMERIC(18,6) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tax_details_doc ON tax_details(doc_type, doc_item_id);
 -- Archivos asociados a documentos
 CREATE TABLE documents_archivos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -787,6 +1013,35 @@ CREATE TABLE documents_archivos (
     is_primary BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- TABLAS PARA AJUSTES DE INVENTARIO
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS inventory_adjustments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
+    adjustment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    reason TEXT NOT NULL,  -- e.g., 'MERMA', 'CONTEO FISICO'
+    status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_adjustments_warehouse ON inventory_adjustments(warehouse_id);
+CREATE TRIGGER update_inventory_adjustments_updated_at BEFORE UPDATE ON inventory_adjustments FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+
+CREATE TABLE IF NOT EXISTS adjustment_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    adjustment_id UUID NOT NULL REFERENCES inventory_adjustments(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity_adjustment NUMERIC(18,6) NOT NULL,  -- Positivo: entrada, Negativo: salida
+    unit_cost NUMERIC(18,6),  -- Para entradas
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- PASO 13: GESTIÓN DE INVENTARIOS CON PARTICIONAMIENTO (OPTIMIZADO)
 -- ============================================================================
 
@@ -795,7 +1050,7 @@ CREATE TABLE public.stock_ledger (
     id UUID DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     warehouse_id UUID NOT NULL,
-    zone_id UUID,
+    zone_id UUID REFERENCES warehouse_zones(id) ON DELETE SET NULL,
     product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
     movement_date DATE NOT NULL,
 
@@ -2892,6 +3147,22 @@ BEGIN
 END; 
 $$;
 
+ALTER TABLE purchase_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE purchase_order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales_order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reception_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shipments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shipment_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_adjustments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE adjustment_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE product_serials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE returns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE return_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tax_details ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow user to read their own branches" ON public.branches AS PERMISSIVE FOR ALL TO public USING ( true);
 CREATE POLICY "Allow user to read their own brands" ON public.brands AS PERMISSIVE FOR ALL TO public USING ( true);

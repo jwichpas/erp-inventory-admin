@@ -19,6 +19,15 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
 })
 
+// Cliente específico para el esquema SUNAT
+export const supabaseSunat = createClient(supabaseUrl, supabaseAnonKey, {
+  db: { schema: 'sunat' },
+  auth: {
+    persistSession: false, // No necesitamos autenticación persistente para catálogos
+    autoRefreshToken: false,
+  },
+})
+
 // Set up auth state change handler for RLS context
 supabase.auth.onAuthStateChange((event, session) => {
   if (session?.user) {
